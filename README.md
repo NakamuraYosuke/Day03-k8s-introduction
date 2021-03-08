@@ -68,3 +68,10 @@ Kubernetes Pod 内のコンテナー同⼠が動的 IP アドレスによって�
 Kubernetes には、異なるワーカーの Pod 同⼠が接続することを可能にする、仮想ネットワークが、Kubernetes において、Pod が他の Pod の IP アドレスを検出することは容易ではありません。
 
 ![](https://raw.githubusercontent.com/NakamuraYosuke/Day03-k8s-introduction/main/images/k8snetwork.png)
+
+Kubernetesのサービスでは、ある Podのコンテナーから、他の Pod のコンテナーにネットワーク接続できるようにする働きがあります。
+
+Pod はさまざまな原因で再起動し、毎回、前回とは異なる内部 IP アドレスが付与されます。
+
+再起動のたびに⼀⽅の Pod が他⽅の Pod の IP アドレスを検出するのではなく、サービスが他⽅の Pod に静的 IP アドレスを⽤意していれば、再起動後、どのワーカーノードで Pod が動作しても問題は⽣じません。
+
