@@ -90,3 +90,369 @@ Kubernetes Master はAPIエンドポイントの提供、コンテナのスケ�
 もう一方のKubernetes Nodeは、いわゆるDockerホストに相当し、実際にコンテナが起動するノードです。
 ![](https://raw.githubusercontent.com/NakamuraYosuke/Day03-k8s-introduction/main/images/kubernetesmasterandnode.png)
 
+Kubernetesクラスタを操作するには、CLIツールのkubectlとYAML形式かJSON形式で書かれたマニフェストファイルを用いて、Kubernetes Masterにリソースの登録をおこないます。
+
+### Kubernetesとリソース
+Kubernetesのリソースの種類を下記に示します。
+
+|  リソース種別  |  概要  |
+| ---- | ---- |
+|  Workloads  |  コンテナの実行に関するリソース  |
+|  Discovery&LB  |  コンテナを外部公開するようなエンドポイントを提供するリソース  |
+|  Config&Storage  |  設定/機密情報/永続化ボリュームなどに関するリソース  |
+|  Cluster  |  セキュリティやクォータなどに関するリソース  |
+|  Metadata  |  クラスタ内の他のリソースを操作するリソース |
+
+
+#### Workloadsリソース
+Workloadsリソースは、クラスタ上にコンテナを起動させるために利用するリソースです。
+
+- Pod
+- ReplicationController
+- ReplicaSet
+- Deployment
+- DaemonDet
+- StatefulSet
+- Job
+- CronJob
+
+#### Discovery&LBリソース
+Discovery&LBリソースは、コンテナのサービスディスカバリや、クラスタの外部からもアクセス可能なエンドポイントを提供するリソースです。
+ServiceとIngressの２種類のDiscovery＆LBリソースがあります。
+Serviceには、下記の種類のタイプが存在します。
+
+- ClusterIP
+- ExternalIP
+- NodePort
+- LoadBalancer
+- Headless
+- ExternalName
+- None-Selector
+
+#### Confit&Storageリソース
+Confit&Storageリソースは、設定や機密データをコンテナに埋め込んだり永続ボリュームを提供するリソースです。
+SecretとConfigMapはいずれもKey-Valueのデータ構造を持ち、保存したいデータが機密データなのか、一般的な設定情報なのかによって使い分けます。
+
+- Secret
+- ConfigMap
+- PersistentVolumeClaim
+
+#### Clusterリソース
+Clusterリソースは、クラスタ自体の振る舞いを定義するリソースです。
+セキュリティ周りの設定やポリシー、クラスタの管理性を高める機能のためのリソースなど様々なリソースがあります。
+
+- Node
+- Namespace
+- PersistentVolume
+- ResourceQuota
+- ServiceAccount
+- Role
+- ClusterRole
+- RoleBinding
+- ClusterRoleBinding
+- NetworkPolicy
+
+#### Metadataリソース
+Metadataリソースは、クラスタ内の他のリソースの動作を制御するためのリソースです。
+例えば、Podをオートスケーリングさせるために利用されるHorizontalPodAutoscalerは、Deploymentリソースを操作してレプリカ数を変更することでオートスケーリングを実現しています。
+
+- LimitRange
+- HorizontalPodAutoscaler
+- CustomResourceDefinition
+
+### Namecpaceによる仮想的なクラスタの分離
+Kubernetesには、Namespaceと呼ばれる仮想的なKubernetesクラスタの分離機能があります。
+完全な分離レベルではないため使い所は限られますが、１つのKubernetesクラスタを複数チームで利用したりプロダクション環境/ステージング環境/開発環境などのように環境ごとに分離したりすることも可能です。
+
+### kubectlを使ってみよう
+kubectlツールがKubernetes Masterと通信する際には、接続先サーバの情報や認証情報が必要となります。
+kubectlはkubeconfit（デフォルトでは、`~/.kube/config`に書かれている情報をしようして接続します。
+
+```
+$ more ~/.kube/config
+
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://api.crc.testing:6443
+  name: api-crc-testing:6443
+- cluster:
+    certificate-authority-data: ・・・
+contexts:
+- context:
+    cluster: api-crc-testing:6443
+    user: developer/api-crc-testing:6443
+  name: /api-crc-testing:6443/developer
+- context:
+    cluster: api.crc.testing:6443
+    namespace: default
+    user: kubeadmin
+  name: crc-admin
+- context:
+    cluster: api.crc.testing:6443
+    namespace: default
+    user: developer
+  name: crc-developer
+kind: Config
+preferences: {}
+users:
+- name: developer
+  user:
+    token: sha256~_・・・
+- name: developer/api-crc-testing:6443
+  user:
+    token: sha256~・・・
+- name: kube:admin/api-crc-testing:6443
+  user:
+    token: sha256~・・・
+- name: kubeadmin
+  user:
+    token: sha256~・・・
+```
+
+OpenShift（CRC）をインストールした際に、`crc-admin`と`crc-developer`というコンテキストが作成されています。
+
+ますはkubeadminでログインしてみましょう。
+```
+$ kubectl config use-context crc-admin
+```
+
+プロジェクトの一覧を表示してみます。
+```
+$ kubectl get project
+```
+下記のように一覧が表示されるはずです。
+```
+NAME                                               DISPLAY NAME   STATUS
+default                                                           Active
+kube-node-lease                                                   Active
+kube-public                                                       Active
+kube-system                                                       Active
+openshift                                                         Active
+・・・
+```
+
+namespaceを作成します。
+```
+$ kubectl create namespace kubetest
+```
+kubetestのコンテキストを作成します。
+```
+$ kubectl config set-context kubetest/api-crc-testing:6443/kube:admin \
+--cluster=api-crc-testing:6443 \
+--user=kubeadmin \
+--namespace=kubetest
+```
+作成したkubetestのnamespaceに切り替えます。
+```
+$ kubectl config use-context kubetest/api-crc-testing:6443/kube:admin
+```
+kubetestのnamespaceに変わっていることを確認します。
+```
+$ kubectl config get-context
+```
+
+### マニフェストとリソースの作成
+kubectlが利用できるようになったところで、マニフェストを使ってコンテナを起動してみます。
+今回は１つのコンテナからなるPodを「sample-pod」という名前で作成してみます。
+
+-- sample-pod.yaml --
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-pod
+spec:
+  containers:
+    - name: nginx-container
+      image: nginx:1.12
+```
+
+上記のsample-pod.yamlのマニフェストからPodを作成します。
+```
+$ kubectl create -f sample-pod.yaml
+```
+
+コンテナの起動状態を確認します。
+```
+$ kubectl get pods
+```
+作成中の場合は、
+```
+NAME         READY   STATUS              RESTARTS   AGE
+sample-pod   0/1     ContainerCreating   0          10s
+```
+と表示され、正常に作成が完了すると
+```
+NAME         READY   STATUS    RESTARTS   AGE
+sample-pod   1/1     Running   0          18s
+```
+上記のようにRunningとなります。
+
+次に、マニフェストを更新します。
+nginxのコンテナイメージタグを1.12から1.13に変更します。
+
+```
+< image: nginx:1.12
+---
+> image: nginx:1.13
+```
+
+変更を適用します。
+```
+$ kubectl apply -f sample-pod.yaml
+```
+`pod/sample-pod configured`と表示されます。
+
+sample-podの利用しているイメージを確認します。
+```
+$ kubectl get pods sample-pod -o jsonpath="{.spec.containers[].image}"
+```
+
+sample-podの詳細を確認します。
+```
+$ kubectl describe pod sample-pod
+```
+
+### 1つのマニフェストの中に複数のリソースを記述する
+先ほどのマニフェストでは、１つのリソースのみ定義しましたが、複数のリソースを１つのマニフェストに記述することもできます。
+
+次はPodを起動するWorkloadsリソースと、そのWorkloadsリソースを外部公開するDiscovery&LBリソースを同一のマニフェスト内に記述します。
+
+複数のリソースを定義する際は、「---」で区切るように記述します。
+
+なお、Discovery&LBリソースはServiceとして定義します。
+
+- ClusterIP (既定値) - クラスター内の内部IPでServiceを公開します。この型では、Serviceはクラスター内からのみ到達可能になります。
+
+- NodePort - NATを使用して、クラスター内の選択された各ノードの同じポートにServiceを公開します。
+<NodeIP>:<NodePort>を使用してクラスターの外部からServiceにアクセスできるようにします。これはClusterIPのスーパーセットです。
+
+- LoadBalancer - 現在のクラウドに外部ロードバランサを作成し(サポートされている場合)、Serviceに固定の外部IPを割り当てます。これはNodePortのスーパーセットです。
+
+- ExternalName - 仕様のexternalNameで指定した名前のCNAMEレコードを返すことによって、任意の名前を使ってServiceを公開します。プロキシは使用されません。このタイプはv1.7以上のkube-dnsを必要とします。
+
+-- sample-multi-resource-manifest.yaml --
+```
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx-container
+        image: nginxinc/nginx-unprivileged:latest
+        ports:
+        - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: LoadBalancer
+  ports:
+  - name: "http-port"
+    protocol: "TCP"
+    port: 8080
+    targetPort: 80
+  selector:
+    app: nginx
+```
+
+マニフェストからリソースを作成します。
+```
+$ kubectl apply -f sample-multi-resource-manifest.yaml
+```
+
+Podが正常に作られているかを確認します。
+```
+$ kubectl get pod
+```
+
+Serviceが正常に作られているかを確認します。
+```
+$ kubectl get svc
+```
+
+今回はServiceのtypeとしてLoadBalancerを選択しました。
+せっかくなので、NodePortやClusterIPを選択してnginxアプリケーションを外部に公開してみます。
+
+DeploymentからServiceを作成する際には`expose`オプションを利用します。
+NodePortのServiceを作成してみましょう。
+```
+$ kubectl expose deployment nginx-deployment --type NodePort --port 8080
+```
+
+```
+$ kubectl get svc nginx-deployment
+NAME               TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+nginx-deployment   NodePort   10.217.4.181   <none>        8080:32345/TCP   10m
+```
+
+上記の例では、`32345`のポート番号がNodeに割り当てられた番号であり、`8080`のポート番号がnginxアプリケーションが待ち受ける番号となります。
+
+OpenShift（CRC）のIPを用いて、アクセスしてみましょう。
+
+```
+$ crc ip
+192.168.64.2
+```
+
+ブラウザのアドレス欄に、`http://192.168.64.2:32345`と入力するか、
+```
+$ curl http://192.168.64.2:32345
+```
+と入力し、`Welcome to nginx!`と表示されればOKです。
+
+
+続いて、ServiceのtypeがClusterIPの場合も見てみましょう。
+```
+$ kubectl expose deployment nginx-deployment --type=ClusterIP --port=8080
+```
+
+ClusterIPをタイプに選択した場合、クラスター内からのみアクセス可能となるためこのままではアクセスできません。
+
+そこでOpenShiftからrouteを作成してみます。
+
+OpenShiftにログインします。
+
+```
+$ eval $(crc oc-env)
+$ oc login -u kubeadmin -p XXXXX https://api.crc.testing:6443
+```
+
+routeを作成します。
+```
+$ oc expose svc nginx-deployment
+route.route.openshift.io/nginx-deployment exposed
+```
+
+routeを確認します。
+```
+$ oc get route
+NAME               HOST/PORT                                    PATH   SERVICES           PORT   TERMINATION   WILDCARD
+nginx-deployment   nginx-deployment-kubetest.apps-crc.testing          nginx-deployment   8080                 None
+```
+
+HOST列に示されたノードにアクセスします。
+```
+$ curl http://nginx-deployment-kubetest.apps-crc.testing
+```
+もしくは、ブラウザのアドレス欄に、`http://nginx-deployment-kubetest.apps-crc.testing`と入力します。
+
+先ほどのNodePortと同様、`Welcome to nginx!`と表示されればOKです。
+
+本日は以上で終了です。
