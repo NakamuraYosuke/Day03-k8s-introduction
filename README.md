@@ -73,5 +73,20 @@ Kubernetesのサービスでは、ある Podのコンテナーから、他の Po
 
 Pod はさまざまな原因で再起動し、毎回、前回とは異なる内部 IP アドレスが付与されます。
 
-再起動のたびに⼀⽅の Pod が他⽅の Pod の IP アドレスを検出するのではなく、サービスが他⽅の Pod に静的 IP アドレスを⽤意していれば、再起動後、どのワーカーノードで Pod が動作しても問題は⽣じません。
+再起動のたびに⼀⽅の Pod が他⽅の Pod の IP アドレスを検出するのではなく、サービスが他⽅の Pod に静的 IP アドレスを⽤意していれば、再起動後にどのワーカーノードで Pod が動作しても問題は⽣じません。
+
+![](https://raw.githubusercontent.com/NakamuraYosuke/Day03-k8s-introduction/main/images/k8ssvcnetwork.png)
+
+アプリケーションの多『は、単⼀の Pod としては動作しません。
+
+ユーザーの要求が増えて⽔平拡張の必要が⽣じると、同じ Pod のリソース定義に基づき、多くの Pod 上で同じコンテナーを実⾏するようになります。
+
+サービスは⼀連の Pod を束ねて単⼀の IP アドレスを割り当て、クライアントから要求があると、各 Pod に負荷を分散します。
+
+## APIリソースとkubectl
+### Kubernetesの基礎
+Kubernetesは、Kubernetes MasterとKubernetes Nodeの2種類のノードから成り立っています。
+Kubernetes Master はAPIエンドポイントの提供、コンテナのスケジューリング、コンテナのスケーリングなどを担うノードです。
+もう一方のKubernetes Nodeは、いわゆるDockerホストに相当し、実際にコンテナが起動するノードです。
+![](https://raw.githubusercontent.com/NakamuraYosuke/Day03-k8s-introduction/main/images/kubernetesmasterandnode.png)
 
